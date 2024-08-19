@@ -2,17 +2,16 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcMainHandlers } from './utils/ipc'
 import windowStateKeeper from 'electron-window-state'
 import { app, shell, BrowserWindow, Menu, dialog, Notification } from 'electron'
-import { stopCore } from './core/manager'
-import { triggerSysProxy } from './resolve/sysproxy'
-import icon from '../../resources/icon.png?asset'
-import { createTray } from './core/tray'
-import { init } from './resolve/init'
+import { pauseWebsockets, startMihomoMemory, stopMihomoMemory } from './core/mihomoApi'
 import { addProfileItem, getAppConfig } from './config'
+import { stopCore } from './core/manager'
+import { triggerSysProxy } from './sys/sysproxy'
+import icon from '../../resources/icon.png?asset'
+import { createTray } from './resolve/tray'
+import { init } from './utils/init'
 import { join } from 'path'
-import { startMihomoMemory, stopMihomoMemory } from './core/mihomoApi'
 
 export let mainWindow: BrowserWindow | null = null
-export let destroyTimer: NodeJS.Timeout | null = null
 
 const gotTheLock = app.requestSingleInstanceLock()
 
@@ -44,6 +43,7 @@ app.on('window-all-closed', (e) => {
 })
 
 app.on('before-quit', () => {
+  pauseWebsockets()
   stopCore()
   triggerSysProxy(false)
   app.exit()
@@ -74,38 +74,33 @@ app.whenReady().then(async () => {
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (!mainWindow) {
-      if (destroyTimer) {
-        clearTimeout(destroyTimer)
-      }
-      createWindow(true)
-    } else {
-      showMainWindow()
-    }
+    showMainWindow()
   })
 })
 
 async function handleDeepLink(url: string): Promise<void> {
-  try {
-    if (url.startsWith('clash://install-config')) {
-      url = url
-        .replace('clash://install-config/?url=', '')
-        .replace('clash://install-config?url=', '')
+  if (!url.startsWith('clash://') && !url.startsWith('mihomo://')) return
+
+  const urlObj = new URL(url)
+  switch (urlObj.host) {
+    case 'install-config': {
+      try {
+        const profileUrl = urlObj.searchParams.get('url')
+        const profileName = urlObj.searchParams.get('name')
+        if (!profileUrl) {
+          throw new Error('缺少参数 url')
+        }
+        await addProfileItem({
+          type: 'remote',
+          name: profileName ?? undefined,
+          url: profileUrl
+        })
+        new Notification({ title: '订阅导入成功' }).show()
+        break
+      } catch (e) {
+        dialog.showErrorBox('订阅导入失败', `${url}\n${e}`)
+      }
     }
-    if (url.startsWith('mihomo://install-config')) {
-      url = url
-        .replace('mihomo://install-config/?url=', '')
-        .replace('mihomo://install-config?url=', '')
-    }
-    url = url.split('&')[0]
-    await addProfileItem({
-      type: 'remote',
-      name: 'Remote File',
-      url: decodeURIComponent(url)
-    })
-    new Notification({ title: '订阅导入成功' }).show()
-  } catch (e) {
-    dialog.showErrorBox('订阅导入失败', `${url}\n${e}`)
   }
 }
 
@@ -138,14 +133,6 @@ export function createWindow(show = false): void {
     if (!silentStart || show) {
       mainWindow?.show()
       mainWindow?.focusOnWebView()
-    } else {
-      if (destroyTimer) {
-        clearTimeout(destroyTimer)
-      }
-      destroyTimer = setTimeout(() => {
-        mainWindow?.destroy()
-        mainWindow = null
-      }, 300000)
     }
   })
 
@@ -158,16 +145,9 @@ export function createWindow(show = false): void {
   })
 
   mainWindow.on('close', (event) => {
-    stopMihomoMemory()
     event.preventDefault()
+    stopMihomoMemory()
     mainWindow?.hide()
-    if (destroyTimer) {
-      clearTimeout(destroyTimer)
-    }
-    destroyTimer = setTimeout(() => {
-      mainWindow?.destroy()
-      mainWindow = null
-    }, 300000)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -185,9 +165,6 @@ export function createWindow(show = false): void {
 }
 
 export function showMainWindow(): void {
-  if (destroyTimer) {
-    clearTimeout(destroyTimer)
-  }
   if (mainWindow) {
     mainWindow.show()
     mainWindow.focusOnWebView()

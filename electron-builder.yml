@@ -8,16 +8,17 @@ files:
   - '!aur/*'
   - '!images/*'
   - '!scripts/*'
+  - '!extra/*'
   - '!tailwind.config.js'
   - '!postcss.config.js'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-asarUnpack:
-  - resources/**
+# asarUnpack:
+#   - resources/**
 extraResources:
-  - from: './resources/'
+  - from: './extra/'
     to: ''
 protocols:
   name: 'Mihomo Party URI Scheme'
@@ -29,7 +30,7 @@ win:
     - nsis
     - 7z
   artifactName: ${name}-windows-${version}-${arch}-portable.${ext}
-  requestedExecutionLevel: requireAdministrator
+  requestedExecutionLevel: highestAvailable
   executableName: mihomo-party
 nsis:
   artifactName: ${name}-windows-${version}-${arch}-setup.${ext}

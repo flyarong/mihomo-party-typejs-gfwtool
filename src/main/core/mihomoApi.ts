@@ -2,7 +2,7 @@ import axios, { AxiosInstance } from 'axios'
 import { getAppConfig, getControledMihomoConfig } from '../config'
 import { mainWindow } from '..'
 import WebSocket from 'ws'
-import { tray } from './tray'
+import { tray } from '../resolve/tray'
 import { calcTraffic } from '../utils/calc'
 
 let axiosIns: AxiosInstance = null!
@@ -14,6 +14,7 @@ let mihomoLogsWs: WebSocket | null = null
 let logsRetry = 10
 let mihomoConnectionsWs: WebSocket | null = null
 let connectionsRetry = 10
+let trafficHopping = false
 
 export const getAxios = async (force: boolean = false): Promise<AxiosInstance> => {
   if (axiosIns && !force) return axiosIns
@@ -143,6 +144,7 @@ export const stopMihomoTraffic = (): void => {
 }
 
 const mihomoTraffic = async (): Promise<void> => {
+  const { showTraffic = true } = await getAppConfig()
   const controledMihomoConfig = await getControledMihomoConfig()
   let server = controledMihomoConfig['external-controller']
   const secret = controledMihomoConfig.secret ?? ''
@@ -154,17 +156,26 @@ const mihomoTraffic = async (): Promise<void> => {
   mihomoTrafficWs.onmessage = (e): void => {
     const data = e.data as string
     const json = JSON.parse(data) as IMihomoTrafficInfo
-    tray?.setTitle(
-      '↑' +
-        `${calcTraffic(json.up)}/s`.padStart(16) +
-        '\n↓' +
-        `${calcTraffic(json.down)}/s`.padStart(16)
-    )
+    if (showTraffic) {
+      if (trafficHopping) {
+        tray?.setTitle('↑' + `${calcTraffic(json.up)}/s`.padStart(12), {
+          fontType: 'monospaced'
+        })
+      } else {
+        tray?.setTitle('↓' + `${calcTraffic(json.down)}/s`.padStart(12), {
+          fontType: 'monospaced'
+        })
+      }
+      trafficHopping = !trafficHopping
+    } else {
+      tray?.setTitle('')
+    }
+
     tray?.setToolTip(
       '↑' +
-        `${calcTraffic(json.up)}/s`.padStart(16) +
+        `${calcTraffic(json.up)}/s`.padStart(12) +
         '\n↓' +
-        `${calcTraffic(json.down)}/s`.padStart(16)
+        `${calcTraffic(json.down)}/s`.padStart(12)
     )
     trafficRetry = 10
     mainWindow?.webContents.send('mihomoTraffic', json)

@@ -181,12 +181,12 @@ export async function updateOverrideItem(item: IOverrideItem): Promise<void> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('updateOverrideItem', item))
 }
 
-export async function getOverride(id: string): Promise<string> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getOverride', id))
+export async function getOverride(id: string, ext: 'js' | 'yaml' | 'log'): Promise<string> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getOverride', id, ext))
 }
 
-export async function setOverride(id: string, str: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setOverride', id, str))
+export async function setOverride(id: string, ext: 'js' | 'yaml', str: string): Promise<void> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setOverride', id, ext, str))
 }
 
 export async function restartCore(): Promise<void> {
@@ -201,7 +201,7 @@ export async function isEncryptionAvailable(): Promise<boolean> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('isEncryptionAvailable'))
 }
 
-export async function encryptString(str: string): Promise<Buffer> {
+export async function encryptString(str: string): Promise<number[]> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('encryptString', str))
 }
 
@@ -225,8 +225,14 @@ export async function getRuntimeConfig(): Promise<IMihomoConfig> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getRuntimeConfig'))
 }
 
-export async function checkUpdate(): Promise<string | undefined> {
+export async function checkUpdate(): Promise<IAppVersion | undefined> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('checkUpdate'))
+}
+
+export async function downloadAndInstallUpdate(version: string): Promise<void> {
+  return ipcErrorWrapper(
+    await window.electron.ipcRenderer.invoke('downloadAndInstallUpdate', version)
+  )
 }
 
 export async function getVersion(): Promise<string> {
@@ -245,6 +251,37 @@ export async function setupFirewall(): Promise<void> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setupFirewall'))
 }
 
+export async function getInterfaces(): Promise<Record<string, NetworkInterfaceInfo[]>> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getInterfaces'))
+}
+
+export async function setPortable(portable: boolean): Promise<void> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setPortable', portable))
+}
+
+export async function isPortable(): Promise<boolean> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('isPortable'))
+}
+
+export async function webdavBackup(): Promise<boolean> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('webdavBackup'))
+}
+
+export async function webdavRestore(filename: string): Promise<void> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('webdavRestore', filename))
+}
+
+export async function listWebdavBackups(): Promise<string[]> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('listWebdavBackups'))
+}
+
 export async function quitApp(): Promise<void> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('quitApp'))
 }
+
+async function alert<T>(msg: T): Promise<void> {
+  const msgStr = typeof msg === 'string' ? msg : JSON.stringify(msg)
+  return await window.electron.ipcRenderer.invoke('alert', msgStr)
+}
+
+window.alert = alert

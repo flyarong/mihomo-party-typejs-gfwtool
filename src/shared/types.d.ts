@@ -36,6 +36,12 @@ type MihomoProxyType =
 type TunStack = 'gvisor' | 'mixed' | 'system'
 type FindProcessMode = 'off' | 'strict' | 'always'
 type DnsMode = 'normal' | 'fake-ip' | 'redir-host'
+type NetworkInterfaceInfo = os.NetworkInterfaceInfo
+
+interface IAppVersion {
+  version: string
+  changelog: string
+}
 
 interface IMihomoVersion {
   version: string
@@ -213,10 +219,14 @@ interface IAppConfig {
   userAgent?: string
   delayTestUrl?: string
   delayTestTimeout?: number
-  encryptedPassword?: Buffer
+  encryptedPassword?: number[]
   controlDns?: boolean
   controlSniff?: boolean
   useDockIcon?: boolean
+  showTraffic?: boolean
+  webdavUrl?: string
+  webdavUsername?: string
+  webdavPassword?: string
   useNameserverPolicy: boolean
   nameserverPolicy: { [key: string]: string | string[] }
 }
@@ -287,6 +297,12 @@ interface IMihomoSnifferConfig {
     }
   }
 }
+
+interface IMihomoProfileConfig {
+  'store-selected'?: boolean
+  'store-fake-ip'?: boolean
+}
+
 interface IMihomoConfig {
   'external-controller': string
   secret?: string
@@ -295,6 +311,7 @@ interface IMihomoConfig {
   'mixed-port': number
   'allow-lan': boolean
   'unified-delay': boolean
+  'tcp-concurrent': boolean
   'log-level': LogLevel
   'find-process-mode': FindProcessMode
   'socks-port'?: number
@@ -317,6 +334,7 @@ interface IMihomoConfig {
   tun: IMihomoTunConfig
   dns: IMihomoDNSConfig
   sniffer: IMihomoSnifferConfig
+  profile: IMihomoProfileConfig
 }
 
 interface IProfileConfig {
@@ -327,6 +345,7 @@ interface IProfileConfig {
 interface IOverrideItem {
   id: string
   type: 'remote' | 'local'
+  ext: 'js' | 'yaml'
   name: string
   updated: number
   url?: string
@@ -354,5 +373,6 @@ interface IProfileItem {
   home?: string
   updated?: number
   override?: string[]
+  useProxy?: boolean
   extra?: ISubscriptionUserInfo
 }
