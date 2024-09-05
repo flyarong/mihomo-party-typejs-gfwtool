@@ -261,7 +261,43 @@ const resolveEnableLoopback = () =>
     file: 'enableLoopback.exe',
     downloadURL: `https://github.com/Kuingsmile/uwp-tool/releases/download/latest/enableLoopback.exe`
   })
+const resolveSysproxy = () =>
+  resolveResource({
+    file: 'sysproxy.exe',
+    downloadURL: `https://github.com/pompurin404/sysproxy/releases/download/${arch}/sysproxy.exe`
+  })
+const resolveRunner = () =>
+  resolveResource({
+    file: 'mihomo-party-run.exe',
+    downloadURL: `https://github.com/pompurin404/mihomo-party-run/releases/download/${arch}/mihomo-party-run.exe`
+  })
+const resolveSubstore = () =>
+  resolveResource({
+    file: 'sub-store.bundle.js',
+    downloadURL:
+      'https://github.com/sub-store-org/Sub-Store/releases/latest/download/sub-store.bundle.js'
+  })
+const resolveSubstoreFrontend = async () => {
+  const tempDir = path.join(TEMP_DIR, 'substore-frontend')
+  const tempZip = path.join(tempDir, 'dist.zip')
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true })
+  }
+  await downloadFile(
+    'https://github.com/sub-store-org/Sub-Store-Front-End/releases/latest/download/dist.zip',
+    tempZip
+  )
+  const zip = new AdmZip(tempZip)
+  const resDir = path.join(cwd, 'extra', 'files')
+  const targetPath = path.join(resDir, 'sub-store-frontend')
+  if (fs.existsSync(targetPath)) {
+    fs.rmSync(targetPath, { recursive: true })
+  }
+  zip.extractAllTo(resDir, true)
+  fs.renameSync(path.join(resDir, 'dist'), targetPath)
 
+  console.log(`[INFO]: sub-store-frontend finished`)
+}
 const resolveFont = async () => {
   const targetPath = path.join(cwd, 'src', 'renderer', 'src', 'assets', 'NotoColorEmoji.ttf')
 
@@ -301,6 +337,28 @@ const tasks = [
     func: resolveEnableLoopback,
     retry: 5,
     winOnly: true
+  },
+  {
+    name: 'sysproxy',
+    func: resolveSysproxy,
+    retry: 5,
+    winOnly: true
+  },
+  {
+    name: 'runner',
+    func: resolveRunner,
+    retry: 5,
+    winOnly: true
+  },
+  {
+    name: 'substore',
+    func: resolveSubstore,
+    retry: 5
+  },
+  {
+    name: 'substorefrontend',
+    func: resolveSubstoreFrontend,
+    retry: 5
   }
 ]
 

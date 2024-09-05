@@ -1,4 +1,12 @@
-import { Button, Input } from '@nextui-org/react'
+import {
+  Button,
+  Divider,
+  Dropdown,
+  DropdownItem,
+  DropdownMenu,
+  DropdownTrigger,
+  Input
+} from '@nextui-org/react'
 import BasePage from '@renderer/components/base/base-page'
 import { getFilePath, readTextFile } from '@renderer/utils/ipc'
 import { useEffect, useRef, useState } from 'react'
@@ -14,6 +22,9 @@ import {
 import { SortableContext } from '@dnd-kit/sortable'
 import { useOverrideConfig } from '@renderer/hooks/use-override-config'
 import OverrideItem from '@renderer/components/override/override-item'
+import { FaPlus } from 'react-icons/fa6'
+import { HiOutlineDocumentText } from 'react-icons/hi'
+import { RiArchiveLine } from 'react-icons/ri'
 
 const Override: React.FC = () => {
   const {
@@ -115,80 +126,114 @@ const Override: React.FC = () => {
         <>
           <Button
             size="sm"
-            className="mr-2"
+            variant="light"
+            title="使用文档"
+            isIconOnly
+            className="app-nodrag"
             onPress={() => {
               open('https://mihomo.party/guides/function/override/yaml/')
             }}
           >
-            使用文档
+            <HiOutlineDocumentText className="text-lg" />
           </Button>
           <Button
+            className="app-nodrag"
+            title="常用覆写仓库"
+            isIconOnly
+            variant="light"
             size="sm"
             onPress={() => {
               open('https://github.com/pompurin404/override-hub')
             }}
           >
-            常用覆写仓库
+            <RiArchiveLine className="text-lg" />
           </Button>
         </>
       }
     >
-      <div className="sticky top-[48px] z-40 backdrop-blur bg-background/40 flex p-2">
-        <Input
-          variant="bordered"
-          size="sm"
-          value={url}
-          onValueChange={setUrl}
-          endContent={
-            <Button
-              size="sm"
-              isIconOnly
-              variant="light"
-              onPress={() => {
-                navigator.clipboard.readText().then((text) => {
-                  setUrl(text)
-                })
+      <div className="sticky top-0 z-40 bg-background">
+        <div className="flex p-2">
+          <Input
+            size="sm"
+            value={url}
+            onValueChange={setUrl}
+            endContent={
+              <Button
+                size="sm"
+                isIconOnly
+                variant="light"
+                onPress={() => {
+                  navigator.clipboard.readText().then((text) => {
+                    setUrl(text)
+                  })
+                }}
+              >
+                <MdContentPaste className="text-lg" />
+              </Button>
+            }
+          />
+          <Button
+            size="sm"
+            color="primary"
+            className="ml-2"
+            isDisabled={url === ''}
+            isLoading={importing}
+            onPress={handleImport}
+          >
+            导入
+          </Button>
+          <Dropdown>
+            <DropdownTrigger>
+              <Button className="ml-2" size="sm" isIconOnly color="primary">
+                <FaPlus />
+              </Button>
+            </DropdownTrigger>
+            <DropdownMenu
+              onAction={async (key) => {
+                if (key === 'open') {
+                  try {
+                    const files = await getFilePath(['js', 'yaml'])
+                    if (files?.length) {
+                      const content = await readTextFile(files[0])
+                      const fileName = files[0].split('/').pop()?.split('\\').pop()
+                      await addOverrideItem({
+                        name: fileName,
+                        type: 'local',
+                        file: content,
+                        ext: fileName?.endsWith('.js') ? 'js' : 'yaml'
+                      })
+                    }
+                  } catch (e) {
+                    alert(e)
+                  }
+                } else if (key === 'new-yaml') {
+                  await addOverrideItem({
+                    name: '新建YAML',
+                    type: 'local',
+                    file: '# https://mihomo.party/guides/function/override/yaml/',
+                    ext: 'yaml'
+                  })
+                } else if (key === 'new-js') {
+                  await addOverrideItem({
+                    name: '新建JS',
+                    type: 'local',
+                    file: '// https://mihomo.party/guides/function/override/js/\nfunction main(config) {\n  return config\n}',
+                    ext: 'js'
+                  })
+                }
               }}
             >
-              <MdContentPaste className="text-lg" />
-            </Button>
-          }
-        />
-        <Button
-          size="sm"
-          color="primary"
-          className="ml-2"
-          isDisabled={url === ''}
-          isLoading={importing}
-          onPress={handleImport}
-        >
-          导入
-        </Button>
-        <Button
-          size="sm"
-          color="primary"
-          className="ml-2"
-          onPress={() => {
-            getFilePath(['js', 'yaml']).then(async (files) => {
-              if (files?.length) {
-                const content = await readTextFile(files[0])
-                const fileName = files[0].split('/').pop()?.split('\\').pop()
-                await addOverrideItem({
-                  name: fileName,
-                  type: 'local',
-                  file: content,
-                  ext: fileName?.endsWith('.js') ? 'js' : 'yaml'
-                })
-              }
-            })
-          }}
-        >
-          打开
-        </Button>
+              <DropdownItem key="open">打开</DropdownItem>
+              <DropdownItem key="new-yaml">新建 YAML</DropdownItem>
+              <DropdownItem key="new-js">新建 JavaScript</DropdownItem>
+            </DropdownMenu>
+          </Dropdown>
+        </div>
+        <Divider />
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <div
-          className={`${fileOver ? 'blur-sm' : ''} grid sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 mx-2`}
+          className={`${fileOver ? 'blur-sm' : ''} grid sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 m-2`}
         >
           <SortableContext
             items={sortedItems.map((item) => {

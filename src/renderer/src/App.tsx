@@ -27,7 +27,11 @@ import LogCard from '@renderer/components/sider/log-card'
 import MihomoCoreCard from '@renderer/components/sider/mihomo-core-card'
 import ResourceCard from '@renderer/components/sider/resource-card'
 import UpdaterButton from '@renderer/components/updater/updater-button'
-import { useAppConfig } from './hooks/use-app-config'
+import { useAppConfig } from '@renderer/hooks/use-app-config'
+import { setNativeTheme, setTitleBarOverlay } from '@renderer/utils/ipc'
+import { platform } from '@renderer/utils/init'
+import { TitleBarOverlayOptions } from 'electron'
+import SubStoreCard from '@renderer/components/sider/substore-card'
 
 const App: React.FC = () => {
   const { appConfig, patchAppConfig } = useAppConfig()
@@ -35,6 +39,8 @@ const App: React.FC = () => {
     appTheme = 'system',
     controlDns = true,
     controlSniff = true,
+    useSubStore = true,
+    useWindowFrame = false,
     siderOrder = [
       'sysproxy',
       'tun',
@@ -47,12 +53,13 @@ const App: React.FC = () => {
       'log',
       'rule',
       'resource',
-      'override'
+      'override',
+      'substore'
     ]
   } = appConfig || {}
   const [order, setOrder] = useState(siderOrder)
   const sensors = useSensors(useSensor(PointerSensor))
-  const { setTheme } = useTheme()
+  const { setTheme, systemTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
   const page = useRoutes(routes)
@@ -62,8 +69,39 @@ const App: React.FC = () => {
   }, [siderOrder])
 
   useEffect(() => {
+    if (appTheme.includes('light')) {
+      setNativeTheme('light')
+    } else if (appTheme === 'system') {
+      setNativeTheme('system')
+    } else {
+      setNativeTheme('dark')
+    }
     setTheme(appTheme)
-  }, [appTheme])
+    if (!useWindowFrame) {
+      let theme = appTheme as string
+      if (appTheme === 'system') {
+        theme = systemTheme || 'light'
+      }
+      const options = { height: 48 } as TitleBarOverlayOptions
+      try {
+        if (platform !== 'darwin') {
+          if (theme.includes('light')) {
+            options.color = '#FFFFFF'
+            options.symbolColor = '#000000'
+          } else if (theme.includes('dark')) {
+            options.color = '#000000'
+            options.symbolColor = '#FFFFFF'
+          } else {
+            options.color = '#18181b'
+            options.symbolColor = '#FFFFFF'
+          }
+        }
+        setTitleBarOverlay(options)
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [appTheme, systemTheme])
 
   const onDragEnd = async (event: DragEndEvent): Promise<void> => {
     const { active, over } = event
@@ -81,29 +119,35 @@ const App: React.FC = () => {
   }
 
   const componentMap = {
-    sysproxy: <SysproxySwitcher />,
-    tun: <TunSwitcher />,
-    profile: <ProfileCard />,
-    proxy: <ProxyCard />,
-    mihomo: <MihomoCoreCard />,
-    connection: <ConnCard />,
-    dns: <DNSCard />,
-    sniff: <SniffCard />,
-    log: <LogCard />,
-    rule: <RuleCard />,
-    resource: <ResourceCard />,
-    override: <OverrideCard />
+    sysproxy: <SysproxySwitcher key="sysproxy" />,
+    tun: <TunSwitcher key="tun" />,
+    profile: <ProfileCard key="profile" />,
+    proxy: <ProxyCard key="proxy" />,
+    mihomo: <MihomoCoreCard key="mihomo" />,
+    connection: <ConnCard key="connection" />,
+    dns: <DNSCard key="dns" />,
+    sniff: <SniffCard key="sniff" />,
+    log: <LogCard key="log" />,
+    rule: <RuleCard key="rule" />,
+    resource: <ResourceCard key="resource" />,
+    override: <OverrideCard key="override" />,
+    substore: <SubStoreCard key="substore" />
   }
 
   return (
     <div className="w-full h-[100vh] flex">
       <div className="side w-[250px] h-full overflow-y-auto no-scrollbar">
-        <div className="sticky top-0 z-40 backdrop-blur bg-background/40 h-[48px]">
+        <div className="app-drag sticky top-0 z-40 backdrop-blur bg-background/40 h-[49px]">
           <div className="flex justify-between p-2">
-            <h3 className="text-lg font-bold leading-[32px]">Mihomo Party</h3>
+            <h3
+              className={`text-lg font-bold leading-[32px] ${!useWindowFrame && platform === 'darwin' ? 'invisible' : ''}`}
+            >
+              Mihomo Party
+            </h3>
             <UpdaterButton />
             <Button
               size="sm"
+              className="app-nodrag"
               isIconOnly
               color={location.pathname.includes('/settings') ? 'primary' : 'default'}
               variant={location.pathname.includes('/settings') ? 'solid' : 'light'}
@@ -127,6 +171,7 @@ const App: React.FC = () => {
               {order.map((key: string) => {
                 if (key === 'dns' && controlDns === false) return null
                 if (key === 'sniff' && controlSniff === false) return null
+                if (key === 'substore' && useSubStore === false) return null
                 return componentMap[key]
               })}
             </SortableContext>

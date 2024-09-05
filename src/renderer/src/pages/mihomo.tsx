@@ -6,7 +6,9 @@ import { useAppConfig } from '@renderer/hooks/use-app-config'
 import { useControledMihomoConfig } from '@renderer/hooks/use-controled-mihomo-config'
 import { platform } from '@renderer/utils/init'
 import { FaNetworkWired } from 'react-icons/fa'
-import { restartCore } from '@renderer/utils/ipc'
+import { IoMdCloudDownload } from 'react-icons/io'
+import PubSub from 'pubsub-js'
+import { mihomoUpgrade, restartCore, triggerSysProxy } from '@renderer/utils/ipc'
 import React, { useState } from 'react'
 import InterfaceModal from '@renderer/components/mihomo/interface-modal'
 
@@ -17,11 +19,11 @@ const CoreMap = {
 
 const Mihomo: React.FC = () => {
   const { appConfig, patchAppConfig } = useAppConfig()
-  const { core = 'mihomo' } = appConfig || {}
+  const { core = 'mihomo', maxLogDays = 7, sysProxy } = appConfig || {}
   const { controledMihomoConfig, patchControledMihomoConfig } = useControledMihomoConfig()
   const {
     ipv6,
-    'external-controller': externalController,
+    'external-controller': externalController = '127.0.0.1:9090',
     secret,
     'log-level': logLevel = 'info',
     'find-process-mode': findProcessMode = 'strict',
@@ -42,9 +44,15 @@ const Mihomo: React.FC = () => {
   const [httpPortInput, setHttpPortInput] = useState(httpPort)
   const [redirPortInput, setRedirPortInput] = useState(redirPort)
   const [tproxyPortInput, setTproxyPortInput] = useState(tproxyPort)
-  const [externalControllerInput, setExternalControllerInput] = useState(externalController)
+  const [externalControllerServerInput, setExternalControllerServerInput] = useState(
+    externalController.split(':')[0]
+  )
+  const [externalControllerPortInput, setExternalControllerPortInput] = useState(
+    externalController.split(':')[1]
+  )
   const [secretInput, setSecretInput] = useState(secret)
 
+  const [upgrading, setUpgrading] = useState(false)
   const [lanOpen, setLanOpen] = useState(false)
 
   const onChangeNeedRestart = async (patch: Partial<IMihomoConfig>): Promise<void> => {
@@ -57,7 +65,39 @@ const Mihomo: React.FC = () => {
       {lanOpen && <InterfaceModal onClose={() => setLanOpen(false)} />}
       <BasePage title="内核设置">
         <SettingCard>
-          <SettingItem title="内核版本" divider>
+          <SettingItem
+            title="内核版本"
+            actions={
+              <Button
+                size="sm"
+                isIconOnly
+                title="升级内核"
+                variant="light"
+                className="ml-2"
+                isLoading={upgrading}
+                onPress={async () => {
+                  try {
+                    setUpgrading(true)
+                    await mihomoUpgrade()
+                    setTimeout(() => {
+                      PubSub.publish('mihomo-core-changed')
+                    }, 2000)
+                  } catch (e) {
+                    if (typeof e === 'string' && e.includes('already using latest version')) {
+                      new Notification('已经是最新版本')
+                    } else {
+                      alert(e)
+                    }
+                  } finally {
+                    setUpgrading(false)
+                  }
+                }}
+              >
+                <IoMdCloudDownload className="text-lg" />
+              </Button>
+            }
+            divider
+          >
             <Select
               className="w-[100px]"
               size="sm"
@@ -84,8 +124,11 @@ const Mihomo: React.FC = () => {
                   size="sm"
                   color="primary"
                   className="mr-2"
-                  onPress={() => {
-                    onChangeNeedRestart({ 'mixed-port': mixedPortInput })
+                  onPress={async () => {
+                    await onChangeNeedRestart({ 'mixed-port': mixedPortInput })
+                    if (sysProxy?.enable) {
+                      triggerSysProxy(true)
+                    }
                   }}
                 >
                   确认
@@ -105,7 +148,7 @@ const Mihomo: React.FC = () => {
               />
             </div>
           </SettingItem>
-          <SettingItem title="Socks端口" divider>
+          <SettingItem title="Socks 端口" divider>
             <div className="flex">
               {socksPortInput !== socksPort && (
                 <Button
@@ -133,7 +176,7 @@ const Mihomo: React.FC = () => {
               />
             </div>
           </SettingItem>
-          <SettingItem title="Http端口" divider>
+          <SettingItem title="Http 端口" divider>
             <div className="flex">
               {httpPortInput !== httpPort && (
                 <Button
@@ -162,7 +205,7 @@ const Mihomo: React.FC = () => {
             </div>
           </SettingItem>
           {platform !== 'win32' && (
-            <SettingItem title="Redir端口" divider>
+            <SettingItem title="Redir 端口" divider>
               <div className="flex">
                 {redirPortInput !== redirPort && (
                   <Button
@@ -192,7 +235,7 @@ const Mihomo: React.FC = () => {
             </SettingItem>
           )}
           {platform === 'linux' && (
-            <SettingItem title="TProxy端口" divider>
+            <SettingItem title="TProxy 端口" divider>
               <div className="flex">
                 {tproxyPortInput !== tproxyPort && (
                   <Button
@@ -221,15 +264,17 @@ const Mihomo: React.FC = () => {
               </div>
             </SettingItem>
           )}
-          <SettingItem title="外部控制" divider>
+          <SettingItem title="外部控制地址" divider>
             <div className="flex">
-              {externalControllerInput !== externalController && (
+              {externalControllerServerInput !== externalController.split(':')[0] && (
                 <Button
                   size="sm"
                   color="primary"
                   className="mr-2"
                   onPress={() => {
-                    onChangeNeedRestart({ 'external-controller': externalControllerInput })
+                    onChangeNeedRestart({
+                      'external-controller': `${externalControllerServerInput}:${externalControllerPortInput}`
+                    })
                   }}
                 >
                   确认
@@ -238,9 +283,40 @@ const Mihomo: React.FC = () => {
 
               <Input
                 size="sm"
-                value={externalControllerInput}
+                className="w-[200px]"
+                value={externalControllerServerInput}
                 onValueChange={(v) => {
-                  setExternalControllerInput(v)
+                  setExternalControllerServerInput(v)
+                }}
+              />
+            </div>
+          </SettingItem>
+          <SettingItem title="外部控制端口" divider>
+            <div className="flex">
+              {externalControllerPortInput !== externalController.split(':')[1] && (
+                <Button
+                  size="sm"
+                  color="primary"
+                  className="mr-2"
+                  onPress={() => {
+                    onChangeNeedRestart({
+                      'external-controller': `${externalControllerServerInput}:${externalControllerPortInput}`
+                    })
+                  }}
+                >
+                  确认
+                </Button>
+              )}
+
+              <Input
+                size="sm"
+                type="number"
+                max={65535}
+                min={0}
+                className="w-[200px]"
+                value={externalControllerPortInput}
+                onValueChange={(v) => {
+                  setExternalControllerPortInput(v)
                 }}
               />
             </div>
@@ -263,6 +339,7 @@ const Mihomo: React.FC = () => {
               <Input
                 size="sm"
                 type="password"
+                className="w-[200px]"
                 value={secretInput}
                 onValueChange={(v) => {
                   setSecretInput(v)
@@ -304,7 +381,7 @@ const Mihomo: React.FC = () => {
               }}
             />
           </SettingItem>
-          <SettingItem title="使用RTT延迟测试" divider>
+          <SettingItem title="使用 RTT 延迟测试" divider>
             <Switch
               size="sm"
               isSelected={unifiedDelay}
@@ -313,7 +390,7 @@ const Mihomo: React.FC = () => {
               }}
             />
           </SettingItem>
-          <SettingItem title="TCP并发" divider>
+          <SettingItem title="TCP 并发" divider>
             <Switch
               size="sm"
               isSelected={tcpConcurrent}
@@ -331,12 +408,23 @@ const Mihomo: React.FC = () => {
               }}
             />
           </SettingItem>
-          <SettingItem title="存储FakeIP" divider>
+          <SettingItem title="存储 FakeIP" divider>
             <Switch
               size="sm"
               isSelected={storeFakeIp}
               onValueChange={(v) => {
                 onChangeNeedRestart({ profile: { 'store-fake-ip': v } })
+              }}
+            />
+          </SettingItem>
+          <SettingItem title="日志保留天数" divider>
+            <Input
+              size="sm"
+              type="number"
+              className="w-[100px]"
+              value={maxLogDays.toString()}
+              onValueChange={(v) => {
+                patchAppConfig({ maxLogDays: parseInt(v) })
               }}
             />
           </SettingItem>

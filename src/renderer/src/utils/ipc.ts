@@ -1,3 +1,5 @@
+import { TitleBarOverlayOptions } from 'electron'
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ipcErrorWrapper(response: any): any {
   if (typeof response === 'object' && 'invokeError' in response) {
@@ -25,6 +27,10 @@ export async function mihomoRules(): Promise<IMihomoRulesInfo> {
 
 export async function mihomoProxies(): Promise<IMihomoProxies> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoProxies'))
+}
+
+export async function mihomoGroups(): Promise<IMihomoMixedGroup[]> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoGroups'))
 }
 
 export async function mihomoProxyProviders(): Promise<IMihomoProxyProviders> {
@@ -57,28 +63,16 @@ export async function mihomoUpgradeGeo(): Promise<void> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoUpgradeGeo'))
 }
 
+export async function mihomoUpgrade(): Promise<void> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoUpgrade'))
+}
+
 export async function mihomoProxyDelay(proxy: string, url?: string): Promise<IMihomoDelay> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoProxyDelay', proxy, url))
 }
 
 export async function mihomoGroupDelay(group: string, url?: string): Promise<IMihomoGroupDelay> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoGroupDelay', group, url))
-}
-
-export async function startMihomoLogs(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('startMihomoLogs'))
-}
-
-export async function stopMihomoLogs(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('stopMihomoLogs'))
-}
-
-export async function startMihomoConnections(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('startMihomoConnections'))
-}
-
-export async function stopMihomoConnections(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('stopMihomoConnections'))
 }
 
 export async function patchMihomoConfig(patch: Partial<IMihomoConfig>): Promise<void> {
@@ -205,8 +199,10 @@ export async function encryptString(str: string): Promise<number[]> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('encryptString', str))
 }
 
-export async function manualGrantCorePermition(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('manualGrantCorePermition'))
+export async function manualGrantCorePermition(password?: string): Promise<void> {
+  return ipcErrorWrapper(
+    await window.electron.ipcRenderer.invoke('manualGrantCorePermition', password)
+  )
 }
 
 export async function getFilePath(ext: string[]): Promise<string[] | undefined> {
@@ -255,14 +251,6 @@ export async function getInterfaces(): Promise<Record<string, NetworkInterfaceIn
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getInterfaces'))
 }
 
-export async function setPortable(portable: boolean): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setPortable', portable))
-}
-
-export async function isPortable(): Promise<boolean> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('isPortable'))
-}
-
 export async function webdavBackup(): Promise<boolean> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('webdavBackup'))
 }
@@ -275,8 +263,74 @@ export async function listWebdavBackups(): Promise<string[]> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('listWebdavBackups'))
 }
 
+export async function webdavDelete(filename: string): Promise<void> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('webdavDelete', filename))
+}
+
+export async function setTitleBarOverlay(overlay: TitleBarOverlayOptions): Promise<void> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setTitleBarOverlay', overlay))
+}
+
+export async function setAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setAlwaysOnTop', alwaysOnTop))
+}
+
+export async function isAlwaysOnTop(): Promise<boolean> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('isAlwaysOnTop'))
+}
+
+export async function relaunchApp(): Promise<void> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('relaunchApp'))
+}
+
 export async function quitApp(): Promise<void> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('quitApp'))
+}
+
+export async function setNativeTheme(theme: 'system' | 'light' | 'dark'): Promise<void> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setNativeTheme', theme))
+}
+
+export async function startSubStoreServer(): Promise<void> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('startSubStoreServer'))
+}
+
+export async function subStorePort(): Promise<number> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('subStorePort'))
+}
+
+export async function subStoreFrontendPort(): Promise<number> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('subStoreFrontendPort'))
+}
+
+export async function subStoreSubs(): Promise<ISubStoreSub[]> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('subStoreSubs'))
+}
+
+export async function subStoreCollections(): Promise<ISubStoreSub[]> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('subStoreCollections'))
+}
+
+export async function openFile(
+  type: 'profile' | 'override',
+  id: string,
+  ext?: 'yaml' | 'js'
+): Promise<void> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('openFile', type, id, ext))
+}
+
+export async function registerShortcut(
+  oldShortcut: string,
+  newShortcut: string,
+  action: string
+): Promise<boolean> {
+  return ipcErrorWrapper(
+    await window.electron.ipcRenderer.invoke('registerShortcut', oldShortcut, newShortcut, action)
+  )
+}
+
+export async function copyEnv(): Promise<void> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('copyEnv'))
 }
 
 async function alert<T>(msg: T): Promise<void> {

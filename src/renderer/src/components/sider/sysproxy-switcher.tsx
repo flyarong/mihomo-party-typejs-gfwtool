@@ -12,7 +12,7 @@ const SysproxySwitcher: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const match = location.pathname.includes('/sysproxy')
-  const { appConfig, patchAppConfig } = useAppConfig(true)
+  const { appConfig, patchAppConfig } = useAppConfig()
   const { sysProxy } = appConfig || {}
   const { enable } = sysProxy || {}
   const {
@@ -27,8 +27,13 @@ const SysproxySwitcher: React.FC = () => {
   })
   const transform = tf ? { x: tf.x, y: tf.y, scaleX: 1, scaleY: 1 } : null
   const onChange = async (enable: boolean): Promise<void> => {
-    await triggerSysProxy(enable)
-    await patchAppConfig({ sysProxy: { enable } })
+    try {
+      await triggerSysProxy(enable)
+      await patchAppConfig({ sysProxy: { enable } })
+      window.electron.ipcRenderer.send('updateTrayMenu')
+    } catch (e) {
+      alert(e)
+    }
   }
 
   return (

@@ -10,7 +10,8 @@ import {
   profileConfigPath,
   profilePath,
   profilesDir,
-  resourcesFilesDir
+  resourcesFilesDir,
+  subStoreDir
 } from './dirs'
 import {
   defaultConfig,
@@ -20,16 +21,13 @@ import {
   defaultProfileConfig
 } from './template'
 import yaml from 'yaml'
-import { mkdir, writeFile, copyFile } from 'fs/promises'
+import { mkdir, writeFile, copyFile, rm, readdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
-import { startPacServer } from '../resolve/server'
+import { startPacServer, startSubStoreServer } from '../resolve/server'
 import { triggerSysProxy } from '../sys/sysproxy'
-import { getAppConfig } from '../config'
+import { getAppConfig, patchAppConfig } from '../config'
 import { app } from 'electron'
-import { startCore } from '../core/manager'
-import { initProfileUpdater } from '../core/profileUpdater'
-import { startMihomoTraffic } from '../core/mihomoApi'
 
 async function initDirs(): Promise<void> {
   if (!existsSync(dataDir())) {
@@ -49,6 +47,9 @@ async function initDirs(): Promise<void> {
   }
   if (!existsSync(mihomoTestDir())) {
     await mkdir(mihomoTestDir())
+  }
+  if (!existsSync(subStoreDir())) {
+    await mkdir(subStoreDir())
   }
 }
 
@@ -90,6 +91,59 @@ async function initFiles(): Promise<void> {
   ])
 }
 
+async function cleanup(): Promise<void> {
+  // update cache
+  const files = await readdir(dataDir())
+  for (const file of files) {
+    if (file.endsWith('.exe') || file.endsWith('.dmg')) {
+      try {
+        await rm(path.join(dataDir(), file))
+      } catch {
+        // ignore
+      }
+    }
+  }
+  // logs
+  const { maxLogDays = 7 } = await getAppConfig()
+  const logs = await readdir(logDir())
+  for (const log of logs) {
+    const date = new Date(log.split('.')[0])
+    const diff = Date.now() - date.getTime()
+    if (diff > maxLogDays * 24 * 60 * 60 * 1000) {
+      try {
+        await rm(path.join(logDir(), log))
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
+async function migration(): Promise<void> {
+  const {
+    siderOrder = [
+      'sysproxy',
+      'tun',
+      'profile',
+      'proxy',
+      'mihomo',
+      'connection',
+      'dns',
+      'sniff',
+      'log',
+      'rule',
+      'resource',
+      'override',
+      'substore'
+    ],
+    useSubStore = true
+  } = await getAppConfig()
+  // add substore sider card
+  if (useSubStore && !siderOrder.includes('substore')) {
+    await patchAppConfig({ siderOrder: [...siderOrder, 'substore'] })
+  }
+}
+
 function initDeeplink(): void {
   if (process.defaultApp) {
     if (process.argv.length >= 2) {
@@ -105,15 +159,13 @@ function initDeeplink(): void {
 export async function init(): Promise<void> {
   await initDirs()
   await initConfig()
+  await migration()
   await initFiles()
+  await cleanup()
   await startPacServer()
+  await startSubStoreServer()
   const { sysProxy } = await getAppConfig()
   await triggerSysProxy(sysProxy.enable)
-  startCore().then(() => {
-    startMihomoTraffic()
-    setTimeout(async () => {
-      await initProfileUpdater()
-    }, 60000)
-  })
+
   initDeeplink()
 }

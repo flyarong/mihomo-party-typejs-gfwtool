@@ -147,6 +147,7 @@ interface IMihomoGroup {
   all: string[]
   extra: Record<string, { alive: boolean; history: IMihomoHistory[] }>
   testUrl?: string
+  fixed?: string
   hidden: boolean
   history: IMihomoHistory[]
   icon: string
@@ -160,6 +161,10 @@ interface IMihomoGroup {
 
 interface IMihomoProxies {
   proxies: Record<string, IMihomoProxy | IMihomoGroup>
+}
+
+interface IMihomoMixedGroup extends IMihomoGroup {
+  all: (IMihomoProxy | IMihomoGroup)[]
 }
 
 interface IMihomoRuleProviders {
@@ -210,12 +215,24 @@ interface IAppConfig {
   core: 'mihomo' | 'mihomo-alpha'
   proxyDisplayMode: 'simple' | 'full'
   proxyDisplayOrder: 'default' | 'delay' | 'name'
+  envType?: 'bash' | 'cmd' | 'powershell'
+  proxyCols: 'auto' | '1' | '2' | '3' | '4'
+  connectionDirection: 'asc' | 'desc'
+  connectionOrderBy: 'time' | 'upload' | 'download' | 'uploadSpeed' | 'downloadSpeed'
+  useSubStore: boolean
+  useCustomSubStore?: boolean
+  customSubStoreUrl?: string
+  autoSetDNS?: boolean
+  originDNS?: string
+  useWindowFrame: boolean
+  proxyInTray: boolean
   siderOrder: string[]
   appTheme: AppTheme
   autoCheckUpdate: boolean
   silentStart: boolean
   autoCloseConnection: boolean
   sysProxy: ISysProxyConfig
+  maxLogDays: number
   userAgent?: string
   delayTestUrl?: string
   delayTestTimeout?: number
@@ -229,6 +246,14 @@ interface IAppConfig {
   webdavPassword?: string
   useNameserverPolicy: boolean
   nameserverPolicy: { [key: string]: string | string[] }
+  showWindowShortcut?: string
+  triggerSysProxyShortcut?: string
+  triggerTunShortcut?: string
+  ruleModeShortcut?: string
+  globalModeShortcut?: string
+  directModeShortcut?: string
+  restartAppShortcut?: string
+  quitAppShortcut?: string
 }
 
 interface IMihomoTunConfig {
@@ -375,4 +400,11 @@ interface IProfileItem {
   override?: string[]
   useProxy?: boolean
   extra?: ISubscriptionUserInfo
+}
+
+interface ISubStoreSub {
+  name: string
+  displayName?: string
+  icon?: string
+  tag?: string[]
 }

@@ -1,8 +1,16 @@
 import { getAppConfig, getControledMihomoConfig } from '../config'
+import { Worker } from 'worker_threads'
+import { resourcesFilesDir, subStoreDir } from '../utils/dirs'
+import subStoreIcon from '../../../resources/subStoreIcon.png?asset'
 import http from 'http'
 import net from 'net'
+import path from 'path'
+import { nativeImage } from 'electron'
+import express from 'express'
 
 export let pacPort: number
+export let subStorePort: number
+export let subStoreFrontendPort: number
 
 const defaultPacScript = `
 function FindProxyForURL(url, host) {
@@ -10,7 +18,7 @@ function FindProxyForURL(url, host) {
 }
 `
 
-function findAvailablePort(startPort: number): Promise<number> {
+export function findAvailablePort(startPort: number): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer()
     server.unref()
@@ -46,4 +54,28 @@ export async function startPacServer(): Promise<void> {
     })
     .listen(pacPort)
   server.unref()
+}
+
+export async function startSubStoreServer(): Promise<void> {
+  const { useSubStore = true, useCustomSubStore = false } = await getAppConfig()
+  if (!useSubStore) return
+  if (!subStoreFrontendPort) {
+    subStoreFrontendPort = await findAvailablePort(4000)
+    const app = express()
+    app.use(express.static(path.join(resourcesFilesDir(), 'sub-store-frontend')))
+    app.listen(subStoreFrontendPort)
+  }
+  if (!useCustomSubStore && !subStorePort) {
+    subStorePort = await findAvailablePort(3000)
+    const icon = nativeImage.createFromPath(subStoreIcon)
+    icon.toDataURL()
+    new Worker(path.join(resourcesFilesDir(), 'sub-store.bundle.js'), {
+      env: {
+        SUB_STORE_BACKEND_API_PORT: subStorePort.toString(),
+        SUB_STORE_DATA_BASE_PATH: subStoreDir(),
+        SUB_STORE_BACKEND_CUSTOM_ICON: icon.toDataURL(),
+        SUB_STORE_BACKEND_CUSTOM_NAME: 'Mihomo Party'
+      }
+    })
+  }
 }

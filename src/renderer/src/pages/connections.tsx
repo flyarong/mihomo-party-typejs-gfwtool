@@ -1,36 +1,67 @@
 import BasePage from '@renderer/components/base/base-page'
-import {
-  mihomoCloseAllConnections,
-  mihomoCloseConnection,
-  startMihomoConnections,
-  stopMihomoConnections
-} from '@renderer/utils/ipc'
-import { Key, useEffect, useMemo, useState } from 'react'
-import { Button, Input } from '@nextui-org/react'
-import { IoCloseCircle } from 'react-icons/io5'
+import { mihomoCloseAllConnections, mihomoCloseConnection } from '@renderer/utils/ipc'
+import { useEffect, useMemo, useState } from 'react'
+import { Badge, Button, Divider, Input, Select, SelectItem } from '@nextui-org/react'
 import { calcTraffic } from '@renderer/utils/calc'
-import { Table, TableHeader, TableColumn, TableBody, TableRow, TableCell } from '@nextui-org/react'
+import ConnectionItem from '@renderer/components/connections/connection-item'
+import { Virtuoso } from 'react-virtuoso'
+import dayjs from 'dayjs'
 import ConnectionDetailModal from '@renderer/components/connections/connection-detail-modal'
+import { CgClose } from 'react-icons/cg'
+import { useAppConfig } from '@renderer/hooks/use-app-config'
+import { HiSortAscending, HiSortDescending } from 'react-icons/hi'
 
 let preData: IMihomoConnectionDetail[] = []
 
 const Connections: React.FC = () => {
   const [filter, setFilter] = useState('')
+  const { appConfig, patchAppConfig } = useAppConfig()
+  const { connectionDirection = 'asc', connectionOrderBy = 'time' } = appConfig || {}
   const [connectionsInfo, setConnectionsInfo] = useState<IMihomoConnectionsInfo>()
   const [connections, setConnections] = useState<IMihomoConnectionDetail[]>([])
-  const [selectedConnection, setSelectedConnection] = useState<IMihomoConnectionDetail>()
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
+  const [selected, setSelected] = useState<IMihomoConnectionDetail>()
 
   const filteredConnections = useMemo(() => {
+    if (connectionOrderBy) {
+      connections.sort((a, b) => {
+        if (connectionDirection === 'asc') {
+          switch (connectionOrderBy) {
+            case 'time':
+              return dayjs(b.start).unix() - dayjs(a.start).unix()
+            case 'upload':
+              return a.upload - b.upload
+            case 'download':
+              return a.download - b.download
+            case 'uploadSpeed':
+              return (a.uploadSpeed || 0) - (b.uploadSpeed || 0)
+            case 'downloadSpeed':
+              return (a.downloadSpeed || 0) - (b.downloadSpeed || 0)
+          }
+        } else {
+          switch (connectionOrderBy) {
+            case 'time':
+              return dayjs(a.start).unix() - dayjs(b.start).unix()
+            case 'upload':
+              return b.upload - a.upload
+            case 'download':
+              return b.download - a.download
+            case 'uploadSpeed':
+              return (b.uploadSpeed || 0) - (a.uploadSpeed || 0)
+            case 'downloadSpeed':
+              return (b.downloadSpeed || 0) - (a.downloadSpeed || 0)
+          }
+        }
+      })
+    }
     if (filter === '') return connections
     return connections?.filter((connection) => {
       const raw = JSON.stringify(connection)
       return raw.includes(filter)
     })
-  }, [connections, filter])
+  }, [connections, filter, connectionDirection, connectionOrderBy])
 
   useEffect(() => {
-    startMihomoConnections()
     window.electron.ipcRenderer.on('mihomoConnections', (_e, info: IMihomoConnectionsInfo) => {
       setConnectionsInfo(info)
       const newConns: IMihomoConnectionDetail[] = []
@@ -48,7 +79,6 @@ const Connections: React.FC = () => {
     })
 
     return (): void => {
-      stopMihomoConnections()
       window.electron.ipcRenderer.removeAllListeners('mihomoConnections')
     }
   }, [])
@@ -60,104 +90,105 @@ const Connections: React.FC = () => {
         <div className="flex">
           <div className="flex items-center">
             <span className="mx-1 text-gray-400">
-              下载: {calcTraffic(connectionsInfo?.downloadTotal ?? 0)}{' '}
+              ↑ {calcTraffic(connectionsInfo?.uploadTotal ?? 0)}{' '}
             </span>
             <span className="mx-1 text-gray-400">
-              上传: {calcTraffic(connectionsInfo?.uploadTotal ?? 0)}{' '}
+              ↓ {calcTraffic(connectionsInfo?.downloadTotal ?? 0)}{' '}
             </span>
           </div>
-          <Button
-            className="ml-1"
-            size="sm"
-            color="primary"
-            onPress={() => mihomoCloseAllConnections()}
-          >
-            关闭所有连接
-          </Button>
+          <Badge color="primary" variant="flat" content={`${filteredConnections.length}`}>
+            <Button
+              className="app-nodrag ml-1"
+              title="关闭全部连接"
+              isIconOnly
+              size="sm"
+              variant="light"
+              onPress={() => {
+                if (filter === '') {
+                  mihomoCloseAllConnections()
+                } else {
+                  filteredConnections.forEach((conn) => {
+                    mihomoCloseConnection(conn.id)
+                  })
+                }
+              }}
+            >
+              <CgClose className="text-lg" />
+            </Button>
+          </Badge>
         </div>
       }
     >
-      {isDetailModalOpen && selectedConnection && (
-        <ConnectionDetailModal
-          onClose={() => setIsDetailModalOpen(false)}
-          connection={selectedConnection}
-        />
+      {isDetailModalOpen && selected && (
+        <ConnectionDetailModal onClose={() => setIsDetailModalOpen(false)} connection={selected} />
       )}
-      <div className="overflow-x-auto sticky top-[49px] z-40 backdrop-blur bg-background/40 flex p-2">
-        <Input
-          variant="bordered"
-          size="sm"
-          value={filter}
-          placeholder="筛选过滤"
-          onValueChange={setFilter}
+      <div className="overflow-x-auto sticky top-0 z-40">
+        <div className="flex p-2 gap-2">
+          <Input
+            variant="flat"
+            size="sm"
+            value={filter}
+            placeholder="筛选过滤"
+            isClearable
+            onValueChange={setFilter}
+          />
+
+          <Select
+            size="sm"
+            className="w-[180px]"
+            selectedKeys={new Set([connectionOrderBy])}
+            onSelectionChange={async (v) => {
+              await patchAppConfig({
+                connectionOrderBy: v.currentKey as
+                  | 'time'
+                  | 'upload'
+                  | 'download'
+                  | 'uploadSpeed'
+                  | 'downloadSpeed'
+              })
+            }}
+          >
+            <SelectItem key="upload">上传量</SelectItem>
+            <SelectItem key="download">下载量</SelectItem>
+            <SelectItem key="uploadSpeed">上传速度</SelectItem>
+            <SelectItem key="downloadSpeed">下载速度</SelectItem>
+            <SelectItem key="time">时间</SelectItem>
+          </Select>
+          <Button
+            size="sm"
+            isIconOnly
+            className="bg-content2"
+            onPress={async () => {
+              patchAppConfig({
+                connectionDirection: connectionDirection === 'asc' ? 'desc' : 'asc'
+              })
+            }}
+          >
+            {connectionDirection === 'asc' ? (
+              <HiSortAscending className="text-lg" />
+            ) : (
+              <HiSortDescending className="text-lg" />
+            )}
+          </Button>
+        </div>
+        <Divider />
+      </div>
+      <div className="h-[calc(100vh-100px)] mt-[1px]">
+        <Virtuoso
+          data={filteredConnections}
+          itemContent={(i, connection) => (
+            <ConnectionItem
+              setSelected={setSelected}
+              setIsDetailModalOpen={setIsDetailModalOpen}
+              selected={selected}
+              close={mihomoCloseConnection}
+              index={i}
+              key={connection.id}
+              info={connection}
+            />
+          )}
         />
       </div>
-      <Table
-        onRowAction={(id: Key) => {
-          setSelectedConnection(connections.find((c) => c.id === (id as string)))
-          setIsDetailModalOpen(true)
-        }}
-        isHeaderSticky
-        isStriped
-        className="h-[calc(100vh-100px)] p-2"
-      >
-        <TableHeader>
-          <TableColumn key="type">类型</TableColumn>
-          <TableColumn key="origin">来源</TableColumn>
-          <TableColumn key="target">目标</TableColumn>
-          <TableColumn key="rule">规则</TableColumn>
-          <TableColumn key="chains">链路</TableColumn>
-          <TableColumn key="close">关闭</TableColumn>
-        </TableHeader>
-        <TableBody items={filteredConnections ?? []}>
-          {(item) => (
-            <TableRow key={item.id}>
-              <TableCell>
-                {item.metadata.type}({item.metadata.network})
-              </TableCell>
-              <TableCell>{item.metadata.process || item.metadata.sourceIP}</TableCell>
-              <TableCell className="max-w-[100px] text-ellipsis whitespace-nowrap overflow-hidden">
-                {item.metadata.host ||
-                  item.metadata.remoteDestination ||
-                  item.metadata.destinationIP}
-              </TableCell>
-              <TableCell className="max-w-[100px] text-ellipsis whitespace-nowrap overflow-hidden">
-                {item.rule} {item.rulePayload}
-              </TableCell>
-              <TableCell className="flag-emoji max-w-[200px] text-ellipsis whitespace-nowrap overflow-hidden">
-                {item.chains.reverse().join('::')}
-              </TableCell>
-              <TableCell>
-                <Button
-                  isIconOnly
-                  size="sm"
-                  color="danger"
-                  variant="light"
-                  onPress={() => mihomoCloseConnection(item.id)}
-                >
-                  <IoCloseCircle className="text-lg" />
-                </Button>
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-      {/* {filteredConnections?.map((connection) => {
-        return (
-          <ConnectionItem
-            mutate={mutate}
-            key={connection.id}
-            id={connection.id}
-            chains={connection.chains}
-            download={connection.download}
-            upload={connection.upload}
-            metadata={connection.metadata}
-            rule={connection.rule}
-            rulePayload={connection.rulePayload}
-            start={connection.start}
-          />
-        )
-      })} */}
     </BasePage>
   )
 }

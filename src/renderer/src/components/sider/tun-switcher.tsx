@@ -3,12 +3,7 @@ import { useControledMihomoConfig } from '@renderer/hooks/use-controled-mihomo-c
 import BorderSwitch from '@renderer/components/base/border-swtich'
 import { TbDeviceIpadHorizontalBolt } from 'react-icons/tb'
 import { useLocation, useNavigate } from 'react-router-dom'
-import {
-  encryptString,
-  patchMihomoConfig,
-  isEncryptionAvailable,
-  restartCore
-} from '@renderer/utils/ipc'
+import { encryptString, isEncryptionAvailable, restartCore } from '@renderer/utils/ipc'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { platform } from '@renderer/utils/init'
@@ -22,7 +17,7 @@ const TunSwitcher: React.FC = () => {
   const match = location.pathname.includes('/tun') || false
   const [openPasswordModal, setOpenPasswordModal] = useState(false)
   const { appConfig, patchAppConfig } = useAppConfig()
-  const { controledMihomoConfig, patchControledMihomoConfig } = useControledMihomoConfig(true)
+  const { controledMihomoConfig, patchControledMihomoConfig } = useControledMihomoConfig()
   const { tun } = controledMihomoConfig || {}
   const { enable } = tun || {}
   const {
@@ -43,8 +38,10 @@ const TunSwitcher: React.FC = () => {
         setOpenPasswordModal(true)
         return
       }
-      if (!encryptionAvailable) {
+      if (!appConfig?.encryptedPassword && !encryptionAvailable) {
         alert('加密不可用，请手动给内核授权')
+        await patchAppConfig({ encryptedPassword: [] })
+        return
       }
     }
 
@@ -53,7 +50,8 @@ const TunSwitcher: React.FC = () => {
     } else {
       await patchControledMihomoConfig({ tun: { enable } })
     }
-    await patchMihomoConfig({ tun: { enable } })
+    await restartCore()
+    window.electron.ipcRenderer.send('updateTrayMenu')
   }
 
   return (
@@ -70,10 +68,16 @@ const TunSwitcher: React.FC = () => {
         <BasePasswordModal
           onCancel={() => setOpenPasswordModal(false)}
           onConfirm={async (password: string) => {
-            const encrypted = await encryptString(password)
-            await patchAppConfig({ encryptedPassword: encrypted })
-            await restartCore()
-            setOpenPasswordModal(false)
+            try {
+              const encrypted = await encryptString(password)
+              await patchAppConfig({ encryptedPassword: encrypted })
+              await patchControledMihomoConfig({ tun: { enable: true }, dns: { enable: true } })
+              await restartCore()
+              window.electron.ipcRenderer.send('updateTrayMenu')
+              setOpenPasswordModal(false)
+            } catch (e) {
+              alert(e)
+            }
           }}
         />
       )}

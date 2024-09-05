@@ -2,22 +2,51 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcMainHandlers } from './utils/ipc'
 import windowStateKeeper from 'electron-window-state'
 import { app, shell, BrowserWindow, Menu, dialog, Notification } from 'electron'
-import { pauseWebsockets, startMihomoMemory, stopMihomoMemory } from './core/mihomoApi'
 import { addProfileItem, getAppConfig } from './config'
-import { stopCore } from './core/manager'
+import { startCore, stopCore } from './core/manager'
 import { triggerSysProxy } from './sys/sysproxy'
 import icon from '../../resources/icon.png?asset'
 import { createTray } from './resolve/tray'
 import { init } from './utils/init'
 import { join } from 'path'
+import { initShortcut } from './resolve/shortcut'
+import { execSync } from 'child_process'
+import { createElevateTask } from './sys/misc'
+import { initProfileUpdater } from './core/profileUpdater'
+import { existsSync, writeFileSync } from 'fs'
+import { taskDir } from './utils/dirs'
+import path from 'path'
 
 export let mainWindow: BrowserWindow | null = null
+if (process.platform === 'win32' && !is.dev) {
+  try {
+    createElevateTask()
+  } catch (e) {
+    try {
+      if (process.argv.slice(1).length > 0) {
+        writeFileSync(path.join(taskDir(), 'param.txt'), process.argv.slice(1).join(' '))
+      } else {
+        writeFileSync(path.join(taskDir(), 'param.txt'), 'empty')
+      }
+      if (!existsSync(path.join(taskDir(), 'mihomo-party-run.exe'))) {
+        throw new Error('mihomo-party-run.exe not found')
+      } else {
+        execSync('schtasks /run /tn mihomo-party-run')
+      }
+    } catch (e) {
+      dialog.showErrorBox('首次启动请以管理员权限运行', '首次启动请以管理员权限运行')
+    } finally {
+      app.exit()
+    }
+  }
+}
 
 const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {
   app.quit()
 }
+
 const initPromise = init()
 
 app.on('second-instance', async (_event, commandline) => {
@@ -42,9 +71,8 @@ app.on('window-all-closed', (e) => {
   // }
 })
 
-app.on('before-quit', () => {
-  pauseWebsockets()
-  stopCore()
+app.on('before-quit', async () => {
+  await stopCore()
   triggerSysProxy(false)
   app.exit()
 })
@@ -61,6 +89,14 @@ app.whenReady().then(async () => {
     dialog.showErrorBox('应用初始化失败', `${e}`)
     app.quit()
   }
+  try {
+    const [startPromise] = await startCore()
+    startPromise.then(async () => {
+      await initProfileUpdater()
+    })
+  } catch (e) {
+    dialog.showErrorBox('内核启动出错', `${e}`)
+  }
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -69,8 +105,9 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
   registerIpcMainHandlers()
-  createWindow()
+  await createWindow()
   await createTray()
+  await initShortcut()
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
@@ -95,6 +132,7 @@ async function handleDeepLink(url: string): Promise<void> {
           name: profileName ?? undefined,
           url: profileUrl
         })
+        mainWindow?.webContents.send('profileConfigUpdated')
         new Notification({ title: '订阅导入成功' }).show()
         break
       } catch (e) {
@@ -104,9 +142,9 @@ async function handleDeepLink(url: string): Promise<void> {
   }
 }
 
-export function createWindow(show = false): void {
+export async function createWindow(): Promise<void> {
   Menu.setApplicationMenu(null)
-  // Create the browser window.
+  const { useWindowFrame = false } = await getAppConfig()
   const mainWindowState = windowStateKeeper({
     defaultWidth: 800,
     defaultHeight: 600
@@ -119,6 +157,13 @@ export function createWindow(show = false): void {
     x: mainWindowState.x,
     y: mainWindowState.y,
     show: false,
+    frame: useWindowFrame,
+    titleBarStyle: useWindowFrame ? 'default' : 'hidden',
+    titleBarOverlay: useWindowFrame
+      ? false
+      : {
+          height: 49
+        },
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon: icon } : {}),
     webPreferences: {
@@ -130,23 +175,17 @@ export function createWindow(show = false): void {
   mainWindowState.manage(mainWindow)
   mainWindow.on('ready-to-show', async () => {
     const { silentStart } = await getAppConfig()
-    if (!silentStart || show) {
+    if (!silentStart) {
       mainWindow?.show()
       mainWindow?.focusOnWebView()
     }
   })
-
-  mainWindow.on('resize', () => {
-    mainWindow?.webContents.send('resize')
-  })
-
-  mainWindow.on('show', () => {
-    startMihomoMemory()
+  mainWindow.webContents.on('did-fail-load', () => {
+    mainWindow?.webContents.reload()
   })
 
   mainWindow.on('close', (event) => {
     event.preventDefault()
-    stopMihomoMemory()
     mainWindow?.hide()
   })
 
@@ -168,7 +207,5 @@ export function showMainWindow(): void {
   if (mainWindow) {
     mainWindow.show()
     mainWindow.focusOnWebView()
-  } else {
-    createWindow(true)
   }
 }

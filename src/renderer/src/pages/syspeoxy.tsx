@@ -57,14 +57,19 @@ function FindProxyForURL(url, host) {
 const Sysproxy: React.FC = () => {
   const { appConfig, patchAppConfig } = useAppConfig()
   const { sysProxy } = appConfig || ({ sysProxy: { enable: false } } as IAppConfig)
-
-  const [values, setValues] = useState({
+  const [changed, setChanged] = useState(false)
+  const [values, originSetValues] = useState({
     enable: sysProxy.enable,
     host: sysProxy.host ?? '',
     bypass: sysProxy.bypass ?? defaultBypass,
     mode: sysProxy.mode ?? 'manual',
     pacScript: sysProxy.pacScript ?? defaultPacScript
   })
+
+  const setValues = (v: typeof values): void => {
+    originSetValues(v)
+    setChanged(true)
+  }
 
   const [openPacEditor, setOpenPacEditor] = useState(false)
 
@@ -90,6 +95,7 @@ const Sysproxy: React.FC = () => {
     try {
       await triggerSysProxy(true)
       await patchAppConfig({ sysProxy: { enable: true } })
+      setChanged(false)
     } catch (e) {
       alert(e)
       await patchAppConfig({ sysProxy: { enable: false } })
@@ -100,9 +106,11 @@ const Sysproxy: React.FC = () => {
     <BasePage
       title="系统代理设置"
       header={
-        <Button size="sm" color="primary" onPress={onSave}>
-          保存
-        </Button>
+        changed && (
+          <Button color="primary" className="app-nodrag" size="sm" onPress={onSave}>
+            保存
+          </Button>
+        )
       }
     >
       {openPacEditor && (
@@ -121,7 +129,7 @@ const Sysproxy: React.FC = () => {
             size="sm"
             className="w-[50%]"
             value={values.host}
-            placeholder="默认127.0.0.1若无特殊需求请勿修改"
+            placeholder="默认 127.0.0.1 若无特殊需求请勿修改"
             onValueChange={(v) => {
               setValues({ ...values, host: v })
             }}
@@ -154,7 +162,7 @@ const Sysproxy: React.FC = () => {
         {values.mode === 'auto' && (
           <SettingItem title="代理模式">
             <Button size="sm" onPress={() => setOpenPacEditor(true)} variant="bordered">
-              编辑PAC脚本
+              编辑 PAC 脚本
             </Button>
           </SettingItem>
         )}

@@ -2,6 +2,13 @@ export const defaultConfig: IAppConfig = {
   core: 'mihomo',
   silentStart: false,
   appTheme: 'system',
+  useWindowFrame: false,
+  proxyInTray: true,
+  maxLogDays: 7,
+  proxyCols: 'auto',
+  connectionDirection: 'asc',
+  connectionOrderBy: 'time',
+  useSubStore: true,
   proxyDisplayMode: 'simple',
   proxyDisplayOrder: 'default',
   autoCheckUpdate: true,
@@ -23,7 +30,8 @@ export const defaultConfig: IAppConfig = {
     'log',
     'rule',
     'resource',
-    'override'
+    'override',
+    'substore'
   ],
   sysProxy: { enable: false, mode: 'manual' }
 }
@@ -54,7 +62,7 @@ export const defaultControledMihomoConfig: Partial<IMihomoConfig> = {
     mtu: 1500
   },
   dns: {
-    enable: false,
+    enable: true,
     ipv6: false,
     'enhanced-mode': 'fake-ip',
     'fake-ip-range': '198.18.0.1/16',

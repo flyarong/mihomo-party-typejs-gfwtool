@@ -69,6 +69,7 @@ const ProfileCard: React.FC = () => {
             className="flex justify-between h-[32px]"
           >
             <h3
+              title={info?.name}
               className={`text-ellipsis whitespace-nowrap overflow-hidden text-md font-bold leading-[32px] ${match ? 'text-white' : 'text-foreground'} `}
             >
               {info?.name}
@@ -92,6 +93,7 @@ const ProfileCard: React.FC = () => {
                 <Button
                   isIconOnly
                   size="sm"
+                  title={dayjs(info.updated).fromNow()}
                   disabled={updating}
                   variant="light"
                   color="default"
@@ -108,12 +110,14 @@ const ProfileCard: React.FC = () => {
               )}
             </div>
           </div>
-          {info.type === 'remote' && (
+          {info.type === 'remote' && extra && (
             <div
               className={`mt-2 flex justify-between ${match ? 'text-white' : 'text-foreground'} `}
             >
-              <small>{extra ? `${calcTraffic(usage)}/${calcTraffic(total)}` : undefined}</small>
-              <small>{dayjs(info.updated).fromNow()}</small>
+              <small>{`${calcTraffic(usage)}/${calcTraffic(total)}`}</small>
+              <small>
+                {extra.expire ? dayjs.unix(extra.expire).format('YYYY-MM-DD') : '长期有效'}
+              </small>
             </div>
           )}
           {info.type === 'local' && (

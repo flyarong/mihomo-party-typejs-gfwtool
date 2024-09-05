@@ -1,9 +1,9 @@
 import BasePage from '@renderer/components/base/base-page'
-import { startMihomoLogs, stopMihomoLogs } from '@renderer/utils/ipc'
 import LogItem from '@renderer/components/logs/log-item'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Input } from '@nextui-org/react'
+import { Button, Divider, Input } from '@nextui-org/react'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
+import { IoLocationSharp } from 'react-icons/io5'
 
 const Logs: React.FC = () => {
   const [logs, setLogs] = useState<IMihomoLogInfo[]>([])
@@ -29,7 +29,6 @@ const Logs: React.FC = () => {
   }, [filteredLogs, trace])
 
   useEffect(() => {
-    startMihomoLogs()
     window.electron.ipcRenderer.on('mihomoLogs', (_e, log: IMihomoLogInfo) => {
       log.time = new Date().toLocaleString()
       setLogs((prevLogs) => {
@@ -38,24 +37,24 @@ const Logs: React.FC = () => {
     })
 
     return (): void => {
-      stopMihomoLogs()
       window.electron.ipcRenderer.removeAllListeners('mihomoLogs')
     }
   }, [])
 
   return (
     <BasePage title="实时日志">
-      <div className="sticky top-[49px] z-40 backdrop-blur bg-background/40 flex p-2">
-        <div className="w-full flex">
+      <div className="sticky top-0 z-40">
+        <div className="w-full flex p-2">
           <Input
-            variant="bordered"
             size="sm"
             value={filter}
             placeholder="筛选过滤"
+            isClearable
             onValueChange={setFilter}
           />
           <Button
             size="sm"
+            isIconOnly
             className="ml-2"
             color={trace ? 'primary' : 'default'}
             variant={trace ? 'solid' : 'bordered'}
@@ -63,27 +62,28 @@ const Logs: React.FC = () => {
               setTrace((prev) => !prev)
             }}
           >
-            追踪
+            <IoLocationSharp className="text-lg" />
           </Button>
         </div>
+        <Divider />
       </div>
-      <Virtuoso
-        autoFocus
-        ref={virtuosoRef}
-        style={{ height: 'calc(100vh - 100px)' }}
-        totalCount={filteredLogs.length}
-        itemContent={(index) => {
-          const log = filteredLogs[index]
-          return (
-            <LogItem
-              key={log.payload + index}
-              time={log.time}
-              type={log.type}
-              payload={log.payload}
-            />
-          )
-        }}
-      />
+      <div className="h-[calc(100vh-100px)] mt-[1px]">
+        <Virtuoso
+          ref={virtuosoRef}
+          data={filteredLogs}
+          itemContent={(i, log) => {
+            return (
+              <LogItem
+                index={i}
+                key={log.payload + i}
+                time={log.time}
+                type={log.type}
+                payload={log.payload}
+              />
+            )
+          }}
+        />
+      </div>
     </BasePage>
   )
 }

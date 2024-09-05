@@ -1,14 +1,18 @@
+import React, { createContext, useContext, ReactNode } from 'react'
 import useSWR from 'swr'
 import { getControledMihomoConfig, patchControledMihomoConfig as patch } from '@renderer/utils/ipc'
-import { useEffect } from 'react'
 
-interface RetuenType {
+interface ControledMihomoConfigContextType {
   controledMihomoConfig: Partial<IMihomoConfig> | undefined
   mutateControledMihomoConfig: () => void
   patchControledMihomoConfig: (value: Partial<IMihomoConfig>) => Promise<void>
 }
 
-export const useControledMihomoConfig = (listenUpdate = false): RetuenType => {
+const ControledMihomoConfigContext = createContext<ControledMihomoConfigContextType | undefined>(
+  undefined
+)
+
+export const ControledMihomoConfigProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { data: controledMihomoConfig, mutate: mutateControledMihomoConfig } = useSWR(
     'getControledMihomoConfig',
     () => getControledMihomoConfig()
@@ -21,12 +25,10 @@ export const useControledMihomoConfig = (listenUpdate = false): RetuenType => {
       alert(e)
     } finally {
       mutateControledMihomoConfig()
-      window.electron.ipcRenderer.send('controledMihomoConfigUpdated')
     }
   }
 
-  useEffect(() => {
-    if (!listenUpdate) return
+  React.useEffect(() => {
     window.electron.ipcRenderer.on('controledMihomoConfigUpdated', () => {
       mutateControledMihomoConfig()
     })
@@ -35,9 +37,19 @@ export const useControledMihomoConfig = (listenUpdate = false): RetuenType => {
     }
   }, [])
 
-  return {
-    controledMihomoConfig,
-    mutateControledMihomoConfig,
-    patchControledMihomoConfig
+  return (
+    <ControledMihomoConfigContext.Provider
+      value={{ controledMihomoConfig, mutateControledMihomoConfig, patchControledMihomoConfig }}
+    >
+      {children}
+    </ControledMihomoConfigContext.Provider>
+  )
+}
+
+export const useControledMihomoConfig = (): ControledMihomoConfigContextType => {
+  const context = useContext(ControledMihomoConfigContext)
+  if (context === undefined) {
+    throw new Error('useControledMihomoConfig must be used within a ControledMihomoConfigProvider')
   }
+  return context
 }

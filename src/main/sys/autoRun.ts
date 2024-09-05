@@ -1,6 +1,6 @@
-import { exec } from 'child_process'
-import { dataDir, exePath, homeDir } from '../utils/dirs'
+import { taskDir, exePath, homeDir } from '../utils/dirs'
 import { mkdir, readFile, rm, writeFile } from 'fs/promises'
+import { exec } from 'child_process'
 import { existsSync } from 'fs'
 import { app } from 'electron'
 import { promisify } from 'util'
@@ -76,14 +76,13 @@ export async function checkAutoRun(): Promise<boolean> {
 export async function enableAutoRun(): Promise<void> {
   if (process.platform === 'win32') {
     const execPromise = promisify(exec)
-    const taskFilePath = path.join(dataDir(), `${appName}.xml`)
+    const taskFilePath = path.join(taskDir(), `${appName}.xml`)
     await writeFile(taskFilePath, Buffer.from(`\ufeff${taskXml}`, 'utf-16le'))
     await execPromise(`schtasks /create /tn "${appName}" /xml "${taskFilePath}" /f`)
   }
   if (process.platform === 'darwin') {
     app.setLoginItemSettings({
-      openAtLogin: true,
-      path: exePath()
+      openAtLogin: true
     })
   }
   if (process.platform === 'linux') {

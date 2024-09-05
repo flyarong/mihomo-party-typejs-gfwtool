@@ -1,5 +1,6 @@
 appId: party.mihomo.app
 productName: mihomo-party
+executableName: mihomo-party
 directories:
   buildResources: build
 files:
@@ -15,8 +16,6 @@ files:
   - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-# asarUnpack:
-#   - resources/**
 extraResources:
   - from: './extra/'
     to: ''
@@ -30,11 +29,9 @@ win:
     - nsis
     - 7z
   artifactName: ${name}-windows-${version}-${arch}-portable.${ext}
-  requestedExecutionLevel: highestAvailable
-  executableName: mihomo-party
 nsis:
   artifactName: ${name}-windows-${version}-${arch}-setup.${ext}
-  shortcutName: ${productName}
+  shortcutName: Mihomo Party
   uninstallDisplayName: ${productName}
   deleteAppDataOnUninstall: true
   allowToChangeInstallationDirectory: true
@@ -44,7 +41,6 @@ nsis:
 mac:
   target:
     - dmg
-    - zip
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.

@@ -1,7 +1,6 @@
 import { is } from '@electron-toolkit/utils'
+import { existsSync, mkdirSync } from 'fs'
 import { app } from 'electron'
-import { existsSync } from 'fs'
-import { rm, writeFile } from 'fs/promises'
 import path from 'path'
 
 export const homeDir = app.getPath('home')
@@ -10,22 +9,24 @@ export function isPortable(): boolean {
   return existsSync(path.join(exeDir(), 'PORTABLE'))
 }
 
-export async function setPortable(portable: boolean): Promise<void> {
-  if (portable) {
-    await writeFile(path.join(exeDir(), 'PORTABLE'), '')
-  } else {
-    await rm(path.join(exeDir(), 'PORTABLE'))
-  }
-  app.relaunch()
-  app.quit()
-}
-
 export function dataDir(): string {
   if (isPortable()) {
     return path.join(exeDir(), 'data')
   } else {
     return app.getPath('userData')
   }
+}
+
+export function taskDir(): string {
+  const dir = path.join(app.getPath('userData'), 'tasks')
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
+export function subStoreDir(): string {
+  return path.join(dataDir(), 'substore')
 }
 
 export function exeDir(): string {

@@ -5,7 +5,7 @@ import { mihomoCloseAllConnections, patchMihomoConfig } from '@renderer/utils/ip
 import { Key } from 'react'
 
 const OutboundModeSwitcher: React.FC = () => {
-  const { controledMihomoConfig, patchControledMihomoConfig } = useControledMihomoConfig(true)
+  const { controledMihomoConfig, patchControledMihomoConfig } = useControledMihomoConfig()
   const { appConfig } = useAppConfig()
   const { autoCloseConnection = true } = appConfig || {}
   const { mode } = controledMihomoConfig || {}
@@ -16,6 +16,7 @@ const OutboundModeSwitcher: React.FC = () => {
     if (autoCloseConnection) {
       await mihomoCloseAllConnections()
     }
+    window.electron.ipcRenderer.send('updateTrayMenu')
   }
   if (!mode) return null
   return (
@@ -23,6 +24,9 @@ const OutboundModeSwitcher: React.FC = () => {
       fullWidth
       color="primary"
       selectedKey={mode}
+      classNames={{
+        tabList: 'bg-content1 shadow-medium'
+      }}
       onSelectionChange={(key: Key) => onChangeMode(key as OutboundMode)}
     >
       <Tab className={`${mode === 'rule' ? 'font-bold' : ''}`} key="rule" title="规则" />

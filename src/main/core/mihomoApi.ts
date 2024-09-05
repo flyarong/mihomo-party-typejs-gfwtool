@@ -4,6 +4,7 @@ import { mainWindow } from '..'
 import WebSocket from 'ws'
 import { tray } from '../resolve/tray'
 import { calcTraffic } from '../utils/calc'
+import { getRuntimeConfig } from './factory'
 
 let axiosIns: AxiosInstance = null!
 let mihomoTrafficWs: WebSocket | null = null
@@ -14,7 +15,6 @@ let mihomoLogsWs: WebSocket | null = null
 let logsRetry = 10
 let mihomoConnectionsWs: WebSocket | null = null
 let connectionsRetry = 10
-let trafficHopping = false
 
 export const getAxios = async (force: boolean = false): Promise<AxiosInstance> => {
   if (axiosIns && !force) return axiosIns
@@ -71,8 +71,33 @@ export const mihomoRules = async (): Promise<IMihomoRulesInfo> => {
 
 export const mihomoProxies = async (): Promise<IMihomoProxies> => {
   const instance = await getAxios()
+  const proxies = (await instance.get('/proxies')) as IMihomoProxies
+  if (!proxies.proxies['GLOBAL']) {
+    throw new Error('GLOBAL proxy not found')
+  }
+  return proxies
+}
 
-  return await instance.get('/proxies')
+export const mihomoGroups = async (): Promise<IMihomoMixedGroup[]> => {
+  const proxies = await mihomoProxies()
+  const runtime = await getRuntimeConfig()
+  const groups: IMihomoMixedGroup[] = []
+  runtime?.['proxy-groups']?.forEach((group: { name: string; url?: string }) => {
+    group = Object.assign(group, group['<<'])
+    const { name, url } = group
+    if (proxies.proxies[name] && 'all' in proxies.proxies[name] && !proxies.proxies[name].hidden) {
+      const newGroup = proxies.proxies[name]
+      newGroup.testUrl = url
+      const newAll = newGroup.all.map((name) => proxies.proxies[name])
+      groups.push({ ...newGroup, all: newAll })
+    }
+  })
+  if (!groups.find((group) => group.name === 'GLOBAL')) {
+    const newGlobal = proxies.proxies['GLOBAL'] as IMihomoGroup
+    const newAll = newGlobal.all.map((name) => proxies.proxies[name])
+    groups.push({ ...newGlobal, all: newAll })
+  }
+  return groups
 }
 
 export const mihomoProxyProviders = async (): Promise<IMihomoProxyProviders> => {
@@ -129,6 +154,11 @@ export const mihomoGroupDelay = async (group: string, url?: string): Promise<IMi
   })
 }
 
+export const mihomoUpgrade = async (): Promise<void> => {
+  const instance = await getAxios()
+  return await instance.post('/upgrade')
+}
+
 export const startMihomoTraffic = async (): Promise<void> => {
   await mihomoTraffic()
 }
@@ -144,7 +174,6 @@ export const stopMihomoTraffic = (): void => {
 }
 
 const mihomoTraffic = async (): Promise<void> => {
-  const { showTraffic = true } = await getAppConfig()
   const controledMihomoConfig = await getControledMihomoConfig()
   let server = controledMihomoConfig['external-controller']
   const secret = controledMihomoConfig.secret ?? ''
@@ -153,32 +182,19 @@ const mihomoTraffic = async (): Promise<void> => {
 
   mihomoTrafficWs = new WebSocket(`ws://${server}/traffic?token=${encodeURIComponent(secret)}`)
 
-  mihomoTrafficWs.onmessage = (e): void => {
+  mihomoTrafficWs.onmessage = async (e): Promise<void> => {
     const data = e.data as string
     const json = JSON.parse(data) as IMihomoTrafficInfo
-    if (showTraffic) {
-      if (trafficHopping) {
-        tray?.setTitle('↑' + `${calcTraffic(json.up)}/s`.padStart(12), {
-          fontType: 'monospaced'
-        })
-      } else {
-        tray?.setTitle('↓' + `${calcTraffic(json.down)}/s`.padStart(12), {
-          fontType: 'monospaced'
-        })
-      }
-      trafficHopping = !trafficHopping
-    } else {
-      tray?.setTitle('')
-    }
-
-    tray?.setToolTip(
-      '↑' +
-        `${calcTraffic(json.up)}/s`.padStart(12) +
-        '\n↓' +
-        `${calcTraffic(json.down)}/s`.padStart(12)
-    )
     trafficRetry = 10
     mainWindow?.webContents.send('mihomoTraffic', json)
+    if (process.platform !== 'linux') {
+      tray?.setToolTip(
+        '↑' +
+          `${calcTraffic(json.up)}/s`.padStart(9) +
+          '\n↓' +
+          `${calcTraffic(json.down)}/s`.padStart(9)
+      )
+    }
   }
 
   mihomoTrafficWs.onclose = (): void => {
@@ -329,27 +345,5 @@ const mihomoConnections = async (): Promise<void> => {
       mihomoConnectionsWs.close()
       mihomoConnectionsWs = null
     }
-  }
-}
-
-export const pauseWebsockets = () => {
-  const recoverList: (() => void)[] = []
-  // Traffic 始终开启
-  stopMihomoTraffic()
-  recoverList.push(startMihomoTraffic)
-  if (mihomoMemoryWs) {
-    stopMihomoMemory()
-    recoverList.push(startMihomoMemory)
-  }
-  if (mihomoLogsWs) {
-    stopMihomoLogs()
-    recoverList.push(startMihomoLogs)
-  }
-  if (mihomoConnectionsWs) {
-    stopMihomoConnections()
-    recoverList.push(startMihomoConnections)
-  }
-  return (): void => {
-    recoverList.forEach((recover) => recover())
   }
 }

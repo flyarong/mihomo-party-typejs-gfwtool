@@ -2,14 +2,11 @@ import BasePage from '@renderer/components/base/base-page'
 import RuleItem from '@renderer/components/rules/rule-item'
 import { Virtuoso } from 'react-virtuoso'
 import { useMemo, useState } from 'react'
-import { Input } from '@nextui-org/react'
-import useSWR from 'swr'
-import { mihomoRules } from '@renderer/utils/ipc'
+import { Divider, Input } from '@nextui-org/react'
+import { useRules } from '@renderer/hooks/use-rules'
 
 const Rules: React.FC = () => {
-  const { data: rules } = useSWR<IMihomoRulesInfo>('mihomoRules', mihomoRules, {
-    refreshInterval: 5000
-  })
+  const { rules } = useRules()
   const [filter, setFilter] = useState('')
 
   const filteredRules = useMemo(() => {
@@ -24,22 +21,32 @@ const Rules: React.FC = () => {
 
   return (
     <BasePage title="分流规则">
-      <div className="sticky top-[49px] z-40 backdrop-blur bg-background/40 flex p-2">
-        <Input
-          variant="bordered"
-          size="sm"
-          value={filter}
-          placeholder="筛选过滤"
-          onValueChange={setFilter}
+      <div className="sticky top-0 z-40">
+        <div className="flex p-2">
+          <Input
+            size="sm"
+            value={filter}
+            placeholder="筛选过滤"
+            isClearable
+            onValueChange={setFilter}
+          />
+        </div>
+        <Divider />
+      </div>
+      <div className="h-[calc(100vh-100px)] mt-[1px]">
+        <Virtuoso
+          data={filteredRules}
+          itemContent={(i, rule) => (
+            <RuleItem
+              index={i}
+              type={rule.type}
+              payload={rule.payload}
+              proxy={rule.proxy}
+              size={rule.size}
+            />
+          )}
         />
       </div>
-      <Virtuoso
-        style={{ height: 'calc(100vh - 100px)' }}
-        data={filteredRules}
-        itemContent={(_, rule) => (
-          <RuleItem type={rule.type} payload={rule.payload} proxy={rule.proxy} size={rule.size} />
-        )}
-      />
     </BasePage>
   )
 }

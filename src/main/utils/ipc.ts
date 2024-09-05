@@ -4,6 +4,7 @@ import {
   mihomoCloseAllConnections,
   mihomoCloseConnection,
   mihomoGroupDelay,
+  mihomoGroups,
   mihomoProxies,
   mihomoProxyDelay,
   mihomoProxyProviders,
@@ -11,13 +12,10 @@ import {
   mihomoRules,
   mihomoUpdateProxyProviders,
   mihomoUpdateRuleProviders,
+  mihomoUpgrade,
   mihomoUpgradeGeo,
   mihomoVersion,
-  patchMihomoConfig,
-  startMihomoConnections,
-  startMihomoLogs,
-  stopMihomoConnections,
-  stopMihomoLogs
+  patchMihomoConfig
 } from '../core/mihomoApi'
 import { checkAutoRun, disableAutoRun, enableAutoRun } from '../sys/autoRun'
 import {
@@ -44,14 +42,25 @@ import {
   setOverride,
   updateOverrideItem
 } from '../config'
+import { startSubStoreServer, subStoreFrontendPort, subStorePort } from '../resolve/server'
 import { isEncryptionAvailable, manualGrantCorePermition, restartCore } from '../core/manager'
 import { triggerSysProxy } from '../sys/sysproxy'
 import { checkUpdate, downloadAndInstallUpdate } from '../resolve/autoUpdater'
-import { getFilePath, openUWPTool, readTextFile, setupFirewall } from '../sys/misc'
+import {
+  getFilePath,
+  openFile,
+  openUWPTool,
+  readTextFile,
+  setNativeTheme,
+  setupFirewall
+} from '../sys/misc'
 import { getRuntimeConfig, getRuntimeConfigStr } from '../core/factory'
-import { isPortable, setPortable } from './dirs'
-import { listWebdavBackups, webdavBackup, webdavRestore } from '../resolve/backup'
+import { listWebdavBackups, webdavBackup, webdavDelete, webdavRestore } from '../resolve/backup'
 import { getInterfaces } from '../sys/interface'
+import { copyEnv } from '../resolve/tray'
+import { registerShortcut } from '../resolve/shortcut'
+import { mainWindow } from '..'
+import { subStoreCollections, subStoreSubs } from '../core/subStoreApi'
 
 function ipcErrorWrapper<T>( // eslint-disable-next-line @typescript-eslint/no-explicit-any
   fn: (...args: any[]) => Promise<T> // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -61,7 +70,17 @@ function ipcErrorWrapper<T>( // eslint-disable-next-line @typescript-eslint/no-e
     try {
       return await fn(...args)
     } catch (e) {
-      return { invokeError: `${e}` }
+      if (e && typeof e === 'object') {
+        if ('message' in e) {
+          return { invokeError: e.message }
+        } else {
+          return { invokeError: JSON.stringify(e) }
+        }
+      }
+      if (e instanceof Error || typeof e === 'string') {
+        return { invokeError: e }
+      }
+      return { invokeError: 'Unknown Error' }
     }
   }
 }
@@ -71,6 +90,7 @@ export function registerIpcMainHandlers(): void {
   ipcMain.handle('mihomoCloseAllConnections', ipcErrorWrapper(mihomoCloseAllConnections))
   ipcMain.handle('mihomoRules', ipcErrorWrapper(mihomoRules))
   ipcMain.handle('mihomoProxies', ipcErrorWrapper(mihomoProxies))
+  ipcMain.handle('mihomoGroups', ipcErrorWrapper(mihomoGroups))
   ipcMain.handle('mihomoProxyProviders', ipcErrorWrapper(mihomoProxyProviders))
   ipcMain.handle('mihomoUpdateProxyProviders', (_e, name) =>
     ipcErrorWrapper(mihomoUpdateProxyProviders)(name)
@@ -83,16 +103,13 @@ export function registerIpcMainHandlers(): void {
     ipcErrorWrapper(mihomoChangeProxy)(group, proxy)
   )
   ipcMain.handle('mihomoUpgradeGeo', ipcErrorWrapper(mihomoUpgradeGeo))
+  ipcMain.handle('mihomoUpgrade', ipcErrorWrapper(mihomoUpgrade))
   ipcMain.handle('mihomoProxyDelay', (_e, proxy, url) =>
     ipcErrorWrapper(mihomoProxyDelay)(proxy, url)
   )
   ipcMain.handle('mihomoGroupDelay', (_e, group, url) =>
     ipcErrorWrapper(mihomoGroupDelay)(group, url)
   )
-  ipcMain.handle('startMihomoLogs', ipcErrorWrapper(startMihomoLogs))
-  ipcMain.handle('stopMihomoLogs', stopMihomoLogs)
-  ipcMain.handle('startMihomoConnections', ipcErrorWrapper(startMihomoConnections))
-  ipcMain.handle('stopMihomoConnections', stopMihomoConnections)
   ipcMain.handle('patchMihomoConfig', (_e, patch) => ipcErrorWrapper(patchMihomoConfig)(patch))
   ipcMain.handle('checkAutoRun', ipcErrorWrapper(checkAutoRun))
   ipcMain.handle('enableAutoRun', ipcErrorWrapper(enableAutoRun))
@@ -127,7 +144,9 @@ export function registerIpcMainHandlers(): void {
   ipcMain.handle('triggerSysProxy', (_e, enable) => ipcErrorWrapper(triggerSysProxy)(enable))
   ipcMain.handle('isEncryptionAvailable', isEncryptionAvailable)
   ipcMain.handle('encryptString', (_e, str) => encryptString(str))
-  ipcMain.handle('manualGrantCorePermition', ipcErrorWrapper(manualGrantCorePermition))
+  ipcMain.handle('manualGrantCorePermition', (_e, password) =>
+    ipcErrorWrapper(manualGrantCorePermition)(password)
+  )
   ipcMain.handle('getFilePath', (_e, ext) => getFilePath(ext))
   ipcMain.handle('readTextFile', (_e, filePath) => ipcErrorWrapper(readTextFile)(filePath))
   ipcMain.handle('getRuntimeConfigStr', ipcErrorWrapper(getRuntimeConfigStr))
@@ -141,13 +160,38 @@ export function registerIpcMainHandlers(): void {
   ipcMain.handle('openUWPTool', ipcErrorWrapper(openUWPTool))
   ipcMain.handle('setupFirewall', ipcErrorWrapper(setupFirewall))
   ipcMain.handle('getInterfaces', getInterfaces)
-  ipcMain.handle('setPortable', (_e, portable) => ipcErrorWrapper(setPortable)(portable))
-  ipcMain.handle('isPortable', isPortable)
   ipcMain.handle('webdavBackup', ipcErrorWrapper(webdavBackup))
   ipcMain.handle('webdavRestore', (_e, filename) => ipcErrorWrapper(webdavRestore)(filename))
   ipcMain.handle('listWebdavBackups', ipcErrorWrapper(listWebdavBackups))
+  ipcMain.handle('webdavDelete', (_e, filename) => ipcErrorWrapper(webdavDelete)(filename))
+  ipcMain.handle('registerShortcut', (_e, oldShortcut, newShortcut, action) =>
+    ipcErrorWrapper(registerShortcut)(oldShortcut, newShortcut, action)
+  )
+  ipcMain.handle('startSubStoreServer', () => ipcErrorWrapper(startSubStoreServer)())
+  ipcMain.handle('subStorePort', () => subStorePort)
+  ipcMain.handle('subStoreFrontendPort', () => subStoreFrontendPort)
+  ipcMain.handle('subStoreSubs', () => ipcErrorWrapper(subStoreSubs)())
+  ipcMain.handle('subStoreCollections', () => ipcErrorWrapper(subStoreCollections)())
+  ipcMain.handle('setNativeTheme', (_e, theme) => {
+    setNativeTheme(theme)
+  })
+  ipcMain.handle('setTitleBarOverlay', (_e, overlay) => {
+    mainWindow?.setTitleBarOverlay(overlay)
+  })
+  ipcMain.handle('setAlwaysOnTop', (_e, alwaysOnTop) => {
+    mainWindow?.setAlwaysOnTop(alwaysOnTop)
+  })
+  ipcMain.handle('isAlwaysOnTop', () => {
+    return mainWindow?.isAlwaysOnTop()
+  })
+  ipcMain.handle('openFile', (_e, type, id, ext) => openFile(type, id, ext))
+  ipcMain.handle('copyEnv', ipcErrorWrapper(copyEnv))
   ipcMain.handle('alert', (_e, msg) => {
     dialog.showErrorBox('Mihomo Party', msg)
+  })
+  ipcMain.handle('relaunchApp', () => {
+    app.relaunch()
+    app.quit()
   })
   ipcMain.handle('quitApp', () => app.quit())
 }

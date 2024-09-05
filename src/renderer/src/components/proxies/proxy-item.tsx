@@ -1,13 +1,12 @@
 import { Button, Card, CardBody } from '@nextui-org/react'
-import React, { useEffect, useMemo, useState } from 'react'
-import PubSub from 'pubsub-js'
+import React, { useMemo, useState } from 'react'
 
 interface Props {
   mutateProxies: () => void
   onProxyDelay: (proxy: string, url?: string) => Promise<IMihomoDelay>
   proxyDisplayMode: 'simple' | 'full'
   proxy: IMihomoProxy | IMihomoGroup
-  group: IMihomoGroup
+  group: IMihomoMixedGroup
   onSelect: (group: string, proxy: string) => void
   selected: boolean
 }
@@ -45,31 +44,30 @@ const ProxyItem: React.FC<Props> = (props) => {
     })
   }
 
-  useEffect(() => {
-    const token = PubSub.subscribe(`${group.name}-delay`, onDelay)
-
-    return (): void => {
-      PubSub.unsubscribe(token)
-    }
-  }, [])
+  const fixed = group.fixed && group.fixed === proxy.name
 
   return (
     <Card
       onPress={() => onSelect(group.name, proxy.name)}
       isPressable
       fullWidth
-      className={`${selected ? 'bg-primary/30' : 'bg-content2'}`}
+      className={`${fixed ? 'bg-secondary/30' : selected ? 'bg-primary/30' : 'bg-content2'}`}
       radius="sm"
     >
       <CardBody className="p-2">
         <div className="flex justify-between items-center">
           <div className="text-ellipsis overflow-hidden whitespace-nowrap">
-            <div className="flag-emoji inline">{proxy.name}</div>
+            <div className="flag-emoji inline" title={proxy.name}>
+              {proxy.name}
+            </div>
             {proxyDisplayMode === 'full' && (
-              <div className="inline ml-2 text-default-500">{proxy.type}</div>
+              <div className="inline ml-2 text-default-500" title={proxy.type}>
+                {proxy.type}
+              </div>
             )}
           </div>
           <Button
+            title={proxy.type}
             isLoading={loading}
             color={delayColor(delay)}
             onPress={onDelay}

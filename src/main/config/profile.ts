@@ -4,7 +4,6 @@ import { addProfileUpdater } from '../core/profileUpdater'
 import { readFile, rm, writeFile } from 'fs/promises'
 import { restartCore } from '../core/manager'
 import { getAppConfig } from './app'
-import { mainWindow } from '..'
 import { existsSync } from 'fs'
 import axios from 'axios'
 import yaml from 'yaml'
@@ -22,7 +21,6 @@ export async function getProfileConfig(force = false): Promise<IProfileConfig> {
 
 export async function setProfileConfig(config: IProfileConfig): Promise<void> {
   profileConfig = config
-  mainWindow?.webContents.send('profileConfigUpdated')
   await writeFile(profileConfigPath(), yaml.stringify(config), 'utf-8')
 }
 
@@ -76,7 +74,9 @@ export async function addProfileItem(item: Partial<IProfileItem>): Promise<void>
 export async function removeProfileItem(id: string): Promise<void> {
   const config = await getProfileConfig()
   config.items = config.items?.filter((item) => item.id !== id)
+  let shouldRestart = false
   if (config.current === id) {
+    shouldRestart = true
     if (config.items.length > 0) {
       config.current = config.items[0].id
     } else {
@@ -86,6 +86,9 @@ export async function removeProfileItem(id: string): Promise<void> {
   await setProfileConfig(config)
   if (existsSync(profilePath(id))) {
     await rm(profilePath(id))
+  }
+  if (shouldRestart) {
+    await restartCore()
   }
 }
 
@@ -108,7 +111,7 @@ export async function createProfile(item: Partial<IProfileItem>): Promise<IProfi
   } as IProfileItem
   switch (newItem.type) {
     case 'remote': {
-      const { userAgent = 'clash-meta' } = await getAppConfig()
+      const { userAgent } = await getAppConfig()
       const { 'mixed-port': mixedPort = 7890 } = await getControledMihomoConfig()
       if (!item.url) throw new Error('Empty URL')
       const res = await axios.get(item.url, {
@@ -120,7 +123,7 @@ export async function createProfile(item: Partial<IProfileItem>): Promise<IProfi
             }
           : false,
         headers: {
-          'User-Agent': userAgent
+          'User-Agent': userAgent || 'clash.meta'
         }
       })
       const data = res.data
@@ -165,13 +168,13 @@ export async function setProfileStr(id: string, content: string): Promise<void> 
 
 export async function getProfile(id: string | undefined): Promise<IMihomoConfig> {
   const profile = await getProfileStr(id)
-  return yaml.parse(profile)
+  return yaml.parse(profile) || {}
 }
 
 // attachment;filename=xxx.yaml; filename*=UTF-8''%xx%xx%xx
 function parseFilename(str: string): string {
-  if (str.includes("filename*=UTF-8''")) {
-    const filename = decodeURIComponent(str.split("filename*=UTF-8''")[1])
+  if (str.match(/filename\*=.*''/)) {
+    const filename = decodeURIComponent(str.split(/filename\*=.*''/)[1])
     return filename
   } else {
     const filename = str.split('filename=')[1]
